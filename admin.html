@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>لوحة إدارة العقارات</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#14201C;color:#F5F1E8;padding:32px;max-width:1000px;margin:0 auto}
+  h1{margin-bottom:4px}
+  p.hint{color:#9AA79E;font-size:13.5px;margin-bottom:20px}
+  .row{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+  input,select,textarea{padding:9px 11px;border-radius:4px;border:1px solid #2E3D36;background:#1C2A24;color:#fff;font-size:13.5px}
+  input,select{flex:1;min-width:120px}
+  textarea{width:100%;margin-top:8px}
+  button{padding:9px 18px;border-radius:4px;border:none;background:#B8935B;color:#14201C;cursor:pointer;font-weight:700}
+  button.danger{background:#A64B3C;color:#fff}
+  .card{background:#1C2A24;border:1px solid #2E3D36;border-radius:8px;padding:16px;margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}
+  th,td{text-align:right;padding:8px;border-bottom:1px solid #2E3D36}
+  th{color:#B8935B}
+  h2{margin-top:40px;color:#B8935B;font-size:18px}
+  #status{color:#9AA79E;font-size:12.5px;margin-top:8px}
+</style>
+</head>
+<body>
+  <h1>لوحة إدارة العقارات</h1>
+  <p class="hint">أدخل رابط السيرفر ومفتاح الإدارة، ثم أضف/عدّل/احذف العقارات وشاهد طلبات التواصل الواردة — بلا حاجة لأي برمجة.</p>
+
+  <div class="row">
+    <input id="apiUrl" placeholder="رابط السيرفر" value="http://localhost:3000">
+    <input id="adminKey" type="password" placeholder="مفتاح الإدارة">
+    <button onclick="loadAll()">دخول وتحميل البيانات</button>
+  </div>
+
+  <h2>➕ إضافة عقار جديد</h2>
+  <div class="card">
+    <div class="grid">
+      <input id="pTitle" placeholder="العنوان (مثال: فيلا 4 غرف - مرسى دبي)">
+      <select id="pType"><option value="sale">للبيع</option><option value="rent">للإيجار</option></select>
+      <input id="pPrice" type="number" placeholder="السعر (AED)">
+      <input id="pLocation" placeholder="الحي/المنطقة">
+    </div>
+    <div class="grid">
+      <input id="pBedrooms" type="number" placeholder="عدد الغرف">
+      <input id="pBathrooms" type="number" placeholder="عدد الحمامات">
+      <input id="pArea" type="number" placeholder="المساحة (قدم مربع)">
+      <input id="pImage" placeholder="رابط صورة (اختياري)">
+    </div>
+    <textarea id="pDesc" rows="3" placeholder="وصف مختصر للعقار"></textarea>
+    <div style="margin-top:10px"><button onclick="addProperty()">إضافة العقار</button></div>
+  </div>
+
+  <h2>🏠 العقارات الحالية</h2>
+  <div id="propertiesList"></div>
+
+  <h2>📩 طلبات التواصل الواردة</h2>
+  <table id="leadsTable" style="display:none">
+    <thead><tr><th>الاسم</th><th>الهاتف</th><th>الإيميل</th><th>الرسالة</th><th>وصل بتاريخ</th></tr></thead>
+    <tbody id="leadsBody"></tbody>
+  </table>
+  <div id="status"></div>
+
+<script>
+function apiBase(){ return document.getElementById('apiUrl').value.replace(/\/$/,''); }
+function key(){ return document.getElementById('adminKey').value; }
+
+async function loadAll(){
+  await loadProperties();
+  await loadLeads();
+}
+
+async function loadProperties(){
+  const res = await fetch(`${apiBase()}/api/properties`);
+  const rows = await res.json();
+  document.getElementById('propertiesList').innerHTML = rows.map(p => `
+    <div class="card">
+      <b>${p.title}</b> — ${p.listing_type === 'sale' ? 'للبيع' : 'للإيجار'} — ${p.price ? p.price.toLocaleString() + ' AED' : '—'}<br>
+      <span style="color:#9AA79E;font-size:13px">${p.location || ''} · ${p.bedrooms || '—'} غرف · ${p.bathrooms || '—'} حمامات · ${p.area_sqft || '—'} قدم²</span>
+      <div style="margin-top:8px">
+        <button class="danger" onclick="deleteProperty(${p.id})">حذف</button>
+      </div>
+    </div>
+  `).join('') || '<p style="color:#9AA79E">لا عقارات بعد.</p>';
+}
+
+async function addProperty(){
+  const body = {
+    title: document.getElementById('pTitle').value,
+    listing_type: document.getElementById('pType').value,
+    price: Number(document.getElementById('pPrice').value) || null,
+    location: document.getElementById('pLocation').value,
+    bedrooms: Number(document.getElementById('pBedrooms').value) || null,
+    bathrooms: Number(document.getElementById('pBathrooms').value) || null,
+    area_sqft: Number(document.getElementById('pArea').value) || null,
+    image_url: document.getElementById('pImage').value,
+    description: document.getElementById('pDesc').value,
+  };
+  const res = await fetch(`${apiBase()}/api/properties?key=${encodeURIComponent(key())}`, {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  if(res.ok){ document.getElementById('status').textContent = '✅ تمت الإضافة.'; loadProperties(); }
+  else { document.getElementById('status').textContent = '❌ فشل — تحقق من مفتاح الإدارة.'; }
+}
+
+async function deleteProperty(id){
+  await fetch(`${apiBase()}/api/properties/${id}?key=${encodeURIComponent(key())}`, { method:'DELETE' });
+  loadProperties();
+}
+
+async function loadLeads(){
+  const res = await fetch(`${apiBase()}/api/leads?key=${encodeURIComponent(key())}`);
+  if(!res.ok) return;
+  const rows = await res.json();
+  document.getElementById('leadsBody').innerHTML = rows.map(l => `
+    <tr><td>${l.name}</td><td>${l.phone||'—'}</td><td>${l.email||'—'}</td><td>${l.message||'—'}</td><td>${l.created_at}</td></tr>
+  `).join('');
+  document.getElementById('leadsTable').style.display = rows.length ? 'table' : 'none';
+}
+</script>
+</body>
+</html>
